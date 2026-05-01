@@ -1,0 +1,23 @@
+---\
+phase: "03"\
+plan: "03"\
+type: execute\
+wave: 3\
+depends_ on: ["03-02"]\
+files_ modified: []\
+autonomous: true\
+requirements: []\
+---\
+<objective>\
+Criar lib de orders, hook useCheckout, componente OrderReview e paginas de sucesso/erro/cancelamento.\
+</objective>\
+<context>\
+@.planning/ROADMAP.ics\
+@.planning/REQUIREMENTS.ics\
+</context>\
+<tasks>\
+<task type="auto">\
+  <name>Task 1: Criar lib orders e useCheckout\
+  <name>Task 2: Criar OrderReview e paginas\
+</task>\
+</tasks>

@@ -31,10 +31,10 @@ export function AddToCartButton({ product, tenantSlug }: AddToCartButtonProps) {
   
   // Get available sizes/colors
   const sizes = hasVariants 
-    ? [...new Set(product.variants?.map(v => v.size).filter(Boolean))]
+    ? [...new Set(product.variants?.map(v => v.size).filter(Boolean))] as string[]
     : [];
   const colors = hasVariants
-    ? [...new Set(product.variants?.map(v => v.color).filter(Boolean))]
+    ? [...new Set(product.variants?.map(v => v.color).filter(Boolean))] as string[]
     : [];
 
   const handleAddToCart = async () => {

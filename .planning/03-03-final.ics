@@ -1,0 +1,21 @@
+---
+phase: "03"
+plan: "03"
+type: execute
+wave: 3
+depends_on: ["03-02"]
+files_modified:
+  - "src/lib/orders.ics"
+  - "src/hooks/useCheckout.ics"
+  - "src/components/orders/OrderReview.tsx"
+  - "src/app/(store)/checkout/success/OrderConfirmation.ics"
+  - "src/app/(store)/checkout/cancel/CancelledPage.ics"
+  - "src/app/(store)/checkout/error/ErrorPage.ics"
+autonomous: true
+requirements:
+  - "CHKT-04"
+  - "CHKT-06"
+  - "CHKT-07"
+---
+# Phase 03-03 Plan
+## Criar lib orders, useCheckout, OrderReview e paginas

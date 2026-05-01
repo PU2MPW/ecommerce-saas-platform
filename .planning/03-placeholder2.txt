@@ -1,0 +1,18 @@
+---
+phase: "03"
+plan: "03"
+type: execute
+wave: 3
+depends_on: ["03-02"]
+files_merged:
+  - "src/app/(store)/checkout/success/page.tsx"
+  - "src/app/(store)/checkout/cancel/page.tsx"
+  - "src/app/(store)/checkout/error/page.tsx"
+  - "src/hooks/useCheckout.ts"
+  - "src/lib/orders.ts"
+autonomous: true
+requirements:
+  - "CHKT-04"
+  - "CHKT-06"
+  - "CHKT-07"
+---

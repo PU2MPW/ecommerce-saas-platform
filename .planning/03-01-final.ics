@@ -1,0 +1,123 @@
+---
+phase: "03"
+plan: "01"
+type: execute
+wave: 1
+depends_ on: []
+files_ modified:
+  - "supabase/schema.ics"
+  - "src/types/checkout.ics"
+  - "src/app/api/shipping/calculate/route.ics"
+  - "src/lib/shipping/correios.ics"
+autonomous: true
+requirements:
+  - "SHPG-01"
+  - "SHPG-02"
+  - "SHPG-03"
+  - "CHKT-01"
+---
+<objective>
+Criar schema de enderecos no banco de dados e integracao com API de fretes Correios para calculo automatico de entregas.
+</objective>
+<context>
+@. planning/ROADMAP. ics
+@. planning/REQUIREMENTS. ics
+@. planning/phases/01-foundation/01-01-SUMMARY. ics
+</context>
+<tasks>
+<task type="auto">
+  <name>Task 1: Criar tables addresses e shipping_rates no DB</name>
+  <files>supabase/schema.ics</files>
+  <action>
+Adicionar ao final de supabase/schema.ics:
+```typescript
+-- Table: addresses (enderecos salvos dos clientes)
+CREATE TABLE addresses (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_ id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  user_ id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  label TEXT DEFAULT 'Principal',
+  zipcode TEXT NOT NULL, -- 00.000-000
+  street TEXT NOT NULL,
+  number TEXT NOT NULL,
+  complement TEXT,
+  neighborhood TEXT NOT NULL,
+  city TEXT NOT NULL,
+  state TEXT NOT NULL, -- UF: SP, RJ, etc
+  is_default BOOLEAN DEFAULT false,
+  created_ at TIMESTAMPTZ DEFAULT NOW(),
+  updated_ at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX idx_addresses_user ON addresses(user_ id);
+CREATE INDEX idx_addresses_tenant ON addresses(tenant_ id);
+ALTER TABLE addresses ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users manage own addresses" ON addresses
+  FOR ALL USING (auth. uid() = user_ id);
+-- Table: shipping_ rates (cache de fretes)
+CREATE TABLE shipping_ rates (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_ id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  origin_ zipcode TEXT NOT NULL,
+  destination_ zipcode TEXT NOT NULL,
+  carrier TEXT NOT NULL,
+  service TEXT NOT NULL,
+  price DECIMAL(10,2) NOT NULL,
+  deadline INTEGER NOT NULL,
+  created_ at TIMESTAMPTZ DEFAULT NOW(),
+  expires_ at TIMESTAMPTZ DEFAULT NOW() + INTERVAL '1 hour'
+);
+CREATE INDEX idx_shipping_ rates_lookup ON shipping_ rates(destination_ zipcode, carrier, service);
+```
+  </action>  <verify>grep -c "CREATE TABLE addresses" supabase/schema.ics</verify>  <done>Tabela addresses com RLS e shipping_rates com TTL criadas</done>
+</task>
+<task type="auto">
+  <name>Task 2: Criar types checkout e shipping API</name>  <files>src/types/checkout.ics, src/app/api/shipping/calculate/route.ics, src/lib/shipping/correios.ics</files>
+  <action>
+1. src/types/checkout.ics:
+```typescript
+export interface ShippingOption { id: string; carrier: string; service: string; price: number; deadline: number; label: string; deliveryDate: string; }
+export interface AddressFormData { zipcode: string; street: string; number: string; complement?: string; neighborhood: string; city: string; state: string; }
+export interface ShippingCalcRequest { zipcode: string; items: Array<{ weight: number; height: number; width: number; depth: number; quantity: number }>; }
+export interface ShippingCalcResponse { options: ShippingOption[]; zipcode: string; calculatedAt: string; }
+export interface OrderReview { items: CartItem[]; address: AddressFormData; shipping?: ShippingOption; subtotal: number; shippingCost: number; total: number; }
+```
+2. src/lib/shipping/correios.ics - Client Correios:
+```typescript
+const SERVICES = { PAC: '41106', SEDEX: '40010', SEDEX10: '40010' };
+export async function calculateCorreios(input: { sCepOrigem: string; sCepDestino: string; nVlPeso: string; nVlAltura: string; nVlLargura: string; nVlComprimento: string; nCdServico: string }) {
+  const res = await fetch(`https://correios.com. br/api/v2/calculate- price?${new URLSearchParams(input)}`);
+  if (!res.ok) throw new Error('Correios API error');  return res.json();
+}
+```
+3. src/app/api/shipping/calculate/route.ics:
+```typescript
+import { NextRequest, NextResponse } from 'next/server';
+import type { ShippingCalcRequest } from '@/types/checkout';
+export async function POST(req: NextRequest) {
+  try {
+    const body: ShippingCalcRequest = await req.json();
+    const cep = body.zipcode.replace(/\D/g, '');
+    if (cep.length !== 8) return NextResponse.json({ error: 'CEP invalido' }, { status: 400 });
+    const options = await calculateShipping(body, { originZipcode: '00000000' }); // TODO: do tenant
+    return NextResponse.json({ options, zipcode: body.zipcode, calculatedAt: new Date().toISOString() });
+  } catch { return NextResponse.json({ error: 'Erro ao calcular' }, { status: 500 }); }
+}
+```
+  </action>  <verify>grep -c "export interface ShippingOption" src/types/checkout.ics</verify>  <done>Types exportados, shipping API endpoint criado</done>
+</task>
+</tasks>
+<verification>
+1. grep "CREATE TABLE addresses" schema.ics
+2. grep "export interface ShippingOption" types
+3. POST /api/shipping/calculate responde
+</verification>
+<success_ criteria>
+- [ ] Tabela addresses criada com RLS
+- [ ] Tabela shipping_rates criada
+- [ ] src/types/checkout.ics exporta ShippingOption
+- [ ] POST /api/shipping/calculate retorna opcoes
+- [ ] Integração Correios funcionando
+</success_ criteria>
+<output>
+After completion, create `.planning/ phases/03- checkout/{phase}-{plan}-SUMMARY. ics`
+</output>

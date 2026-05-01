@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
-import { verify } from 'bcryptjs'
+import bcrypt from 'bcryptjs'
 import { setSession } from '@/lib/auth'
 
 export async function POST(request: Request) {
@@ -33,7 +33,7 @@ export async function POST(request: Request) {
     }
     
     // Verify password
-    const isValid = await verify(password, user.password_hash)
+    const isValid = await bcrypt.compare(password, user.password_hash)
     
     if (!isValid) {
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 })

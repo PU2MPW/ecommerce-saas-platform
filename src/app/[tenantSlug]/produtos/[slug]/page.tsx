@@ -141,7 +141,7 @@ export default async function ProductDetailPage({ params }: ProductDetailProps) 
             <div className="mt-8">
               <h2 className="text-lg font-semibold text-gray-900 mb-3">Descrição</h2>
               <div className="prose prose-sm max-w-none text-gray-600">
-                {product.description.split('\n').map((paragraph, idx) => (
+                {product.description.split('\n').map((paragraph: string, idx: number) => (
                   <p key={idx} className="mb-2">{paragraph}</p>
                 ))}
               </div>

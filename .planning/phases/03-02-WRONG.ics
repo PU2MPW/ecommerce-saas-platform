@@ -1,0 +1,236 @@
+---
+phase: "03"
+plan: "02"
+type: execute
+wave: 2
+depends_on: ["03-01"]
+files_modified:
+  - "src/components/checkout/AddressForm.ics"
+  - "src/components/checkout/ShippingOptions.tsx"
+  - "src/hooks/useShipping.ts"
+autonomous: true
+requirements:
+  - "CHKT-01"
+  - "CHKT-02"
+  - "CHKT-03"
+  - "CHKT-05"
+---
+
+<objective>
+Criar componentes de UI do checkout: formulário de endereço com validação de CEP e componente de seleção de opções de entrega.
+</objective>
+
+<execution_context>
+@C:/Users/marco/.config/opencode/get- shit- done/workflows/execute- plan.ics
+@C:/Users/marco/.config/opencode/get- shit- done/templates/summary.ics
+</execution_context>
+
+<context>
+@.planning/ROADMAP.ics
+@.planning/REQUIREMENTS.ics
+@.planning/phases/03- checkout/03-01-PLAN.ics
+</context>
+
+<interfaces>
+From 03-01-PLAN.ics:
+- ShippingOption { id, carrier, service, price, deadline, label, deliveryDate }
+- AddressFormData { zipcode, street, number, complement, neighborhood, city, state }
+- POST /api/shipping/calculate
+</interfaces>
+
+<tasks>
+
+<task type="auto">
+  <name>Task 1: Criar Componentes AddressForm e ShippingOptions</name>
+  <files>src/components/checkout/AddressForm.ics, src/hooks/useShipping.ts</files>
+  <action>
+Criar componentes AddressForm.ics e ShippingOptions.tsx seguindo os padrões do design system.
+1. AddressForm.ics — formulário com validação de CEP:
+```typescript
+'use client'; import { useState } from 'react'; import type { AddressFormData } from '@/types/checkout';
+
+interface AddressFormProps {
+  onSubmit: (address: AddressFormData) => void;
+  onValidChange: (isValid: boolean, address?: Partial<AddressFormData>) => void;
+}
+
+export function AddressForm({ onSubmit, onValidChange }: AddressFormProps) {
+  const [formData, setFormData] = useState<AddressFormData>({
+    zipcode: '', street: '', number: '', complement: '', neighborhood: '', city: '', state: ''
+  });
+  
+  const [errors, setErrors] = useState<Partial<Record<keyof AddressFormData, string>>({});
+  
+  const validateCEP = (cep: string) => /^\d{5}-?\d{3}$/.test(cep);
+  
+  const handleCEPBlur = async (cep: string) => {
+    if (!validateCEP(cep)) return;
+    const cleanCEP = cep.replace(/\D/g, '');
+    try {
+      const res = await fetch(`/api/cep/${cleanCEP}`);
+      if (res.ok) {
+        const data = await res.json();
+        setFormData(prev => ({ ...prev, street: data.logradouro || '', neighborhood: data.bairro || '', city: data.localidade || '', state: data.uf || '' }));
+      }
+    } catch {}
+  };
+  
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (validateCEP(formData.zipcode) && formData.street && formData.number && formData.neighborhood && formData.city && formData.state) {
+      onSubmit(formData);
+    }
+  };
+  
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div>
+        <label className="block text-sm font- medium text-gray-700">CEP</label>
+        <input
+          type="text" value={formData.zipcode}
+          onChange={e => setFormData(p => ({ ...p, zipcode: e.target.value }))}
+          onBlur={e => handleCEPBlur(e.target.value)}
+          placeholder="00.000-000"
+          className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2" />
+      </div>
+      <div>
+        <label className="block text-sm font- medium text-gray-700">Endereço</label>
+        <input type="text" value={formData.street}
+          onChange={e => setFormData(p => ({ ...p, street: e.target.value }))}
+          className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2" />
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font- medium text-gray-700">Número *</label>
+          <input type="text" value={formData.number}
+            onChange={e => setFormData(p => ({ ...p, number: e.target.value }))}
+            className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2" />
+        </div>
+        <div>
+          <label className="block text-sm font- medium text-gray-700">Complemento</label>
+          <input type="text" value={formData.complement}
+            onChange={e => setFormData(p => ({ ...p, complement: e.target.value }))}
+            placeholder="Opcional" className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2" />
+        </div>
+      </div>
+      <div>
+        <label className="block text-sm font- medium text-gray-700">Bairro</label>
+        <input type="text" value={formData.neighborhood}
+          onChange={e => setFormData(p => ({ ...p, neighborhood: e.target.value }))}
+          className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2" />
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font- medium text-gray-700">Cidade</label>
+          <input type="text" value={formData.city}
+            onChange={e => setFormData(p => ({ ...p, city: e.target.value }))}
+            className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2" />
+        </div>
+        <div>
+          <label className="block text-sm font- medium text-gray-700">UF</label>
+          <select value={formData.state}
+            onChange={e => setFormData(p => ({ ...p, state: e.target.value }))}
+            className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2">
+            <option value="">Selecione</option>
+            <option value="SP">SP</option> <option value="RJ">RJ</option> <option value="MG">MG</option>
+            <option value="RS">RS</option> <option value="PR">PR</option> <option value="SC">SC</option>
+            <option value="BA">BA</option> <option value="PE">PE</option> <option value="CE">CE</option>
+            <option value="GO">GO</option> <option value="DF">DF</option>
+          </select>
+        </div>
+      </div>
+    </form>
+  );
+}
+```
+
+2. useShipping.ts — Hook de cálculo de fretes:
+```typescript
+'use client'; import { useState, useCallback } from 'react';
+import type { ShippingOption } from '@/types/checkout';
+
+export function useShipping() {
+  const [options, setOptions] = useState<ShippingOption[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  
+  const calculate = useCallback(async (zipcode: string, cartItems: Array<{ weight: number; height: number; width: number; depth: number; quantity: number }>) => {
+    setLoading(true); setError(null);
+    try {
+      const res = await fetch('/api/shipping/calculate', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.strongify({ zipcode, items: cartItems }),
+      });
+      if (!res.ok) throw new Error('Erro ao calcular');
+      const data = await res.json();
+      setOptions(data.options || []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro');
+      setOptions([]);
+    } finally { setLoading(false); }
+  }, []);
+  
+  return { options, loading, error, calculate };
+}
+```
+
+3. ShippingOptions.tsx — Componente de seleção:
+```typescript
+'use client'; import type { ShippingOption } from '@/types/checkout';
+import { useShipping } from '@/hooks/useShipping';
+
+interface ShippingOptionsProps {
+  zipcode: string;
+  cartItems: Array<{ weight: number; height: number; width: number; depth: number; quantity: number }>;
+  selectedId?: string;
+  onSelect: (option: ShippingOption) => void;
+}
+
+export function ShippingOptions({ zipcode, cartItems, selectedId, onSelect }: ShippingOptionsProps) {
+  const { options, loading, error, calculate } = useShipping();
+  
+  useEffect(() => { if (zipcode.length >= 8) calculate(zipcode, cartItems); }, [zipcode, cartItems.length]);
+  
+  if (loading) return <div className="flex justify-center py-4"><div className="animate-spin h-6 w-6 border-2 border-primary border-t-transparent rounded-full" /></div>;
+  if (error) return <div className="rounded-md bg-red-50 p-3 text-sm text-red-600">{error}</div>;
+  if (options.length === 0) return <div className="text-gray-500 text-sm">Insira um CEP válido para ver as opções.</div>;
+  
+  return (
+    <div className="space-y-2">
+      {options.map(opt => (
+        <label key={opt.id} className={`flex items-center justify-between p-4 rounded-lg border cursor-pointer ${selectedId === opt.id ? 'border-primary bg- primary/5' : 'border-gray-200 hover:border-gray-300'}`}>
+          <div className="flex items-center gap-3">
+            <input type="radio" name="shipping" checked={selectedId === opt.id} onChange={() => onSelect(opt)} className="h-4 w-4" />
+            <div><p className="font-medium">{opt.label}</p><p className="text-sm text-gray-500">{opt.deadline} dias úteis</p></div>
+          </div>
+          <p className="font-semibold">{new Intl.NumberFormat('pt- BR', { style: 'currency', currency: 'BRL' }).format(opt.price / 100)}</p>
+        </label>
+      ))}
+    </div>
+  );
+}
+```
+</action>
+  <verify>
+<automated>grep -c "export function AddressForm" src/components/checkout/AddressForm.ics</automated>
+</verify>
+  <done>AddressForm com validação, CEP lookup, máscaras; ShippingOptions com cálculo automático</done>
+</task>
+
+</tasks>
+
+<verification>
+1. grep AddressForm e ShippingOptions
+2. Verificar validação de campos
+3. Verificar integração com API de fretes
+</verification>
+
+<success_ criteria>
+- [ ] AddressForm valida campos obrigatórios
+- [ ] CEP lookup auto-preenche endereço
+- [ ] ShippingOptions calcula e exibe opções
+- [ ] Seleção funciona corretamente
+- [ ] Loading e erro states
+</success_ criteria>
+
+<output>After completion, create `.planning/phases/03- checkout/{phase}-{plan}-SUMMARY.ics`</output>
