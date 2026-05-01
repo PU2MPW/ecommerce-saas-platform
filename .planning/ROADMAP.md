@@ -26,6 +26,13 @@
 
 **Requirements:** TENT-01, TENT-02, TENT-03, AUTH-01, AUTH-02, AUTH-03, AUTH-04
 
+**Plans:** 3 plans
+
+**Plan list:**
+- [x] 01-01-PLAN.md — Supabase schema + RLS + auth client
+- [x] 01-02-PLAN.md — Authentication API + UI components  
+- [x] 01-03-PLAN.md — Tenant middleware + routing
+
 **Success Criteria:**
 1. Supabase project configurado com schema completo
 2. Row Level Security (RLS) ativo em todas as tabelas
