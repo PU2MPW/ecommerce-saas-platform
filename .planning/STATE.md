@@ -8,7 +8,7 @@ See: .planning/PROJECT.md (updated 2025-05-01)
 
 **Core value:** Plataforma de e-commerce que permite lojistas brasileiros iniciarem sua loja virtual rapidamente com total conformidade legal (LGPD, CDC), sem necessidade de conhecimento técnico.
 
-**Current phase:** Phase 1 - Foundation (UI-SPEC approved)
+**Current phase:** Phase 2 - Catalog & Cart
 
 ---
 
@@ -16,15 +16,15 @@ See: .planning/PROJECT.md (updated 2025-05-01)
 
 ### Overall
 
-- **Phases:** 0/10 complete
-- **Requirements:** 0/53 complete
+- **Phases:** 1/10 complete
+- **Requirements:** 7/53 complete
 
 ### Per Phase
 
 | Phase | Status | Progress |
 |-------|--------|----------|
-| 1 - Foundation | ○ UI-SPEC Ready | 0% |
-| 2 - Catalog & Cart | ○ Not Started | 0% |
+| 1 - Foundation | ✓ Complete | 100% |
+| 2 - Catalog & Cart | ● In Progress | 0% |
 | 3 - Checkout & Shipping | ○ Not Started | 0% |
 | 4 - Payments - Pix | ○ Not Started | 0% |
 | 5 - Payments - Card/Boleto | ○ Not Started | 0% |
@@ -53,4 +53,4 @@ No milestones completed yet.
 
 ---
 
-*State updated: 2025-05-01 after Phase 1 UI-SPEC approved*
+*State updated: 2025-05-01 after Phase 1 complete - Foundation deployed*
