@@ -1,62 +1,22 @@
 import { NextResponse } from 'next/server';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import db from '@/lib/db';
 
 export async function GET(request: Request) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const tenantSlug = searchParams.get('tenant') || 'demo';
-    
-    const supabase = await createSupabaseServerClient();
-    
-    const { data: tenant } = await supabase
-      .from('tenants')
-      .select('id')
-      .eq('slug', tenantSlug)
-      .single();
-    
-    if (!tenant) {
-      return NextResponse.json({ error: 'Tenant not found' }, { status: 404 });
-    }
-    
-    const { data: orders } = await supabase
-      .from('orders')
-      .select('*')
-      .eq('tenant_id', tenant.id)
-      .order('created_at', { ascending: false });
-    
-    return NextResponse.json({ orders: orders || [] });
-    
-  } catch (error) {
-    return NextResponse.json({ error: 'Failed to fetch orders' }, { status: 500 });
-  }
+  const { searchParams } = new URL(request.url);
+  const tenantSlug = searchParams.get('tenant') || 'demo';
+  
+  const tenantResult = await db.query('SELECT id FROM tenants WHERE slug = $1', [tenantSlug]);
+  if (tenantResult.rows.length === 0) return NextResponse.json({ error: 'Tenant not found' }, { status: 404 });
+  
+  const result = await db.query('SELECT * FROM orders WHERE tenant_id = $1 ORDER BY created_at DESC', [tenantResult.rows[0].id]);
+  return NextResponse.json({ orders: result.rows });
 }
 
 export async function PUT(request: Request) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const orderId = searchParams.get('id');
-    
-    if (!orderId) {
-      return NextResponse.json({ error: 'Order ID required' }, { status: 400 });
-    }
-    
-    const body = await request.json();
-    const supabase = await createSupabaseServerClient();
-    
-    const { data: order, error } = await supabase
-      .from('orders')
-      .update(body)
-      .eq('id', orderId)
-      .select()
-      .single();
-    
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-    
-    return NextResponse.json({ order });
-    
-  } catch (error) {
-    return NextResponse.json({ error: 'Failed to update order' }, { status: 500 });
-  }
+  const { searchParams } = new URL(request.url);
+  const orderId = searchParams.get('id');
+  const body = await request.json();
+  
+  const result = await db.query('UPDATE orders SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING *', [body.status, orderId]);
+  return NextResponse.json({ order: result.rows[0] });
 }

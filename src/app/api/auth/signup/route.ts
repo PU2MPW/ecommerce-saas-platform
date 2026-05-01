@@ -1,68 +1,23 @@
-import { NextResponse } from 'next/server'
-import { createSupabaseServerClient } from '@/lib/supabase/server'
-import { hash } from 'bcryptjs'
-import { setSession } from '@/lib/auth'
+import { NextResponse } from 'next/server';
+import db from '@/lib/db';
 
 export async function POST(request: Request) {
-  try {
-    const { email, password, name, tenantSlug } = await request.json()
-    
-    const supabase = await createSupabaseServerClient()
-    
-    // Get tenant
-    const { data: tenant } = await supabase
-      .from('tenants')
-      .select('id')
-      .eq('slug', tenantSlug || 'demo')
-      .single()
-    
-    const tenantId = tenant?.id
-    
-    if (!tenantId) {
-      return NextResponse.json({ error: 'Invalid tenant' }, { status: 400 })
-    }
-    
-    // Check if user already exists
-    const { data: existingUser } = await supabase
-      .from('users')
-      .select('id')
-      .eq('tenant_id', tenantId)
-      .eq('email', email)
-      .single()
-    
-    if (existingUser) {
-      return NextResponse.json({ error: 'Email already registered' }, { status: 400 })
-    }
-    
-    // Hash password
-    const passwordHash = await hash(password, 12)
-    
-    // Create user
-    const { data: user, error } = await supabase
-      .from('users')
-      .insert({
-        tenant_id: tenantId,
-        email,
-        name,
-        password_hash: passwordHash,
-        role: 'customer'
-      })
-      .select()
-      .single()
-    
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 })
-    }
-    
-    // Set session
-    await setSession(user.id, tenantId, email)
-    
-    return NextResponse.json({ 
-      success: true, 
-      user: { id: user.id, email: user.email, name: user.name } 
-    })
-  } catch (error) {
-    console.error('Signup error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  const { email, password, name, tenantSlug } = await request.json();
+  
+  const tenantResult = await db.query('SELECT id FROM tenants WHERE slug = $1', [tenantSlug || 'demo']);
+  const tenantId = tenantResult.rows[0]?.id;
+  
+  const existing = await db.query('SELECT id FROM users WHERE email = $1 AND tenant_id = $2', [email, tenantId]);
+  
+  if (existing.rows.length > 0) {
+    return NextResponse.json({ error: 'Email já cadastrado' }, { status: 400 });
   }
+  
+  const result = await db.query(
+    'INSERT INTO users (tenant_id, email, name, password_hash, role) VALUES ($1, $2, $3, $4, $5) RETURNING id, email, name, role',
+    [tenantId, email, name, password, 'customer']
+  );
+  
+  const user = result.rows[0];
+  return NextResponse.json({ user, token: 'demo-token-' + user.id }, { status: 201 });
 }

@@ -84,12 +84,12 @@ export async function createSupabaseServerClient() {
 }
 
 export async function getCurrentTenant() {
-  const cookieStore = await import('next/headers').then(m => m.cookies())
-  const cookies = await cookieStore()
-  const tenantSlug = cookies.get('x-tenant-slug')?.value || 'demo'
+  const { cookies } = await import('next/headers');
+  const cookieStore = await cookies();
+  const tenantSlug = cookieStore.get('x-tenant-slug')?.value || 'demo';
   
-  const result = await db.query('SELECT * FROM tenants WHERE slug = $1', [tenantSlug])
-  return result.rows[0] || null
+  const result = await db.query('SELECT * FROM tenants WHERE slug = $1', [tenantSlug]);
+  return result.rows[0] || null;
 }
 
 export async function setTenantCookie(tenantSlug: string) {}

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import db from '@/lib/db';
 
 export async function GET(request: Request) {
   try {
@@ -7,43 +7,22 @@ export async function GET(request: Request) {
     const tenantSlug = searchParams.get('tenant') || 'demo';
     const productId = searchParams.get('id');
     
-    const supabase = await createSupabaseServerClient();
-    
-    // Get tenant ID
-    const { data: tenant } = await supabase
-      .from('tenants')
-      .select('id')
-      .eq('slug', tenantSlug)
-      .single();
-    
-    if (!tenant) {
+    const tenantResult = await db.query('SELECT id FROM tenants WHERE slug = $1', [tenantSlug]);
+    if (tenantResult.rows.length === 0) {
       return NextResponse.json({ error: 'Tenant not found' }, { status: 404 });
     }
+    const tenantId = tenantResult.rows[0].id;
     
     if (productId) {
-      // Get single product
-      const { data: product } = await supabase
-        .from('products')
-        .select('*')
-        .eq('id', productId)
-        .eq('tenant_id', tenant.id)
-        .single();
-      
-      return NextResponse.json({ product });
+      const productResult = await db.query('SELECT * FROM products WHERE id = $1 AND tenant_id = $2', [productId, tenantId]);
+      return NextResponse.json({ product: productResult.rows[0] });
     }
     
-    // Get all products for tenant
-    const { data: products } = await supabase
-      .from('products')
-      .select('*')
-      .eq('tenant_id', tenant.id)
-      .order('created_at', { ascending: false });
-    
-    return NextResponse.json({ products: products || [] });
-    
+    const productsResult = await db.query('SELECT * FROM products WHERE tenant_id = $1 ORDER BY created_at DESC', [tenantId]);
+    return NextResponse.json({ products: productsResult.rows });
   } catch (error) {
-    console.error('Admin products API error:', error);
-    return NextResponse.json({ error: 'Failed to fetch products' }, { status: 500 });
+    console.error('Error:', error);
+    return NextResponse.json({ error: 'Failed' }, { status: 500 });
   }
 }
 
@@ -52,51 +31,20 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { tenant_slug, name, description, price, compare_price, stock, sku, category_id, image_url, active } = body;
     
-    if (!name || !price) {
-      return NextResponse.json({ error: 'Nome e preço são obrigatórios' }, { status: 400 });
-    }
-    
-    const supabase = await createSupabaseServerClient();
-    
-    // Get tenant ID
-    const { data: tenant } = await supabase
-      .from('tenants')
-      .select('id')
-      .eq('slug', tenant_slug || 'demo')
-      .single();
-    
-    if (!tenant) {
+    const tenantResult = await db.query('SELECT id FROM tenants WHERE slug = $1', [tenant_slug || 'demo']);
+    if (tenantResult.rows.length === 0) {
       return NextResponse.json({ error: 'Tenant not found' }, { status: 404 });
     }
     
-    // Insert product
-    const { data: product, error } = await supabase
-      .from('products')
-      .insert({
-        tenant_id: tenant.id,
-        name,
-        description,
-        price,
-        compare_price,
-        stock,
-        sku,
-        category_id,
-        image_url,
-        active: active ?? true
-      })
-      .select()
-      .single();
+    const result = await db.query(
+      `INSERT INTO products (tenant_id, name, description, price, compare_at_price, stock, sku, category_id, image_url, is_active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+      [tenantResult.rows[0].id, name, description, price, compare_price, stock, sku, category_id, image_url, active ?? true]
+    );
     
-    if (error) {
-      console.error('Product insert error:', error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-    
-    return NextResponse.json({ product }, { status: 201 });
-    
-  } catch (error) {
-    console.error('Create product error:', error);
-    return NextResponse.json({ error: 'Failed to create product' }, { status: 500 });
+    return NextResponse.json({ product: result.rows[0] }, { status: 201 });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 400 });
   }
 }
 
@@ -104,30 +52,16 @@ export async function PUT(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const productId = searchParams.get('id');
-    
-    if (!productId) {
-      return NextResponse.json({ error: 'Product ID required' }, { status: 400 });
-    }
-    
     const body = await request.json();
-    const supabase = await createSupabaseServerClient();
     
-    const { data: product, error } = await supabase
-      .from('products')
-      .update(body)
-      .eq('id', productId)
-      .select()
-      .single();
+    const keys = Object.keys(body);
+    const values = Object.values(body);
+    const setClause = keys.map((k, i) => `${k} = $${i + 1}`).join(', ');
     
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-    
-    return NextResponse.json({ product });
-    
-  } catch (error) {
-    console.error('Update product error:', error);
-    return NextResponse.json({ error: 'Failed to update product' }, { status: 500 });
+    const result = await db.query(`UPDATE products SET ${setClause}, updated_at = NOW() WHERE id = $${keys.length + 1} RETURNING *`, [...values, productId]);
+    return NextResponse.json({ product: result.rows[0] });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 400 });
   }
 }
 
@@ -135,27 +69,9 @@ export async function DELETE(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const productId = searchParams.get('id');
-    
-    if (!productId) {
-      return NextResponse.json({ error: 'Product ID required' }, { status: 400 });
-    }
-    
-    const supabase = await createSupabaseServerClient();
-    
-    // Soft delete - set active to false
-    const { error } = await supabase
-      .from('products')
-      .update({ active: false })
-      .eq('id', productId);
-    
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-    
+    await db.query('UPDATE products SET is_active = false WHERE id = $1', [productId]);
     return NextResponse.json({ success: true });
-    
-  } catch (error) {
-    console.error('Delete product error:', error);
-    return NextResponse.json({ error: 'Failed to delete product' }, { status: 500 });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 400 });
   }
 }
