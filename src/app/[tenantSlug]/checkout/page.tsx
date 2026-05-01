@@ -1,6 +1,6 @@
 import { CartProvider } from '@/hooks/useCart';
 import { CheckoutForm } from '@/components/checkout/CheckoutForm';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import db from '@/lib/db';
 
 interface CheckoutPageProps {
   params: Promise<{ tenantSlug: string }>;
@@ -10,13 +10,12 @@ export default async function CheckoutPage({ params }: CheckoutPageProps) {
   const { tenantSlug } = await params;
   
   // Fetch tenant Pix configuration
-  const supabase = await createSupabaseServerClient();
-  const { data: tenant } = await supabase
-    .from('tenants')
-    .select('pix_key')
-    .eq('slug', tenantSlug || 'demo')
-    .single();
+  const result = await db.query(
+    'SELECT pix_key FROM tenants WHERE slug = $1',
+    [tenantSlug || 'demo']
+  );
   
+  const tenant = result.rows[0];
   const tenantPixKey = tenant?.pix_key || null;
   
   return (

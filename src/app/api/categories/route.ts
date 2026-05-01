@@ -1,30 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createSupabaseServerClient } from '@/lib/supabase/server'
+import db from '@/lib/db'
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createSupabaseServerClient()
+    const result = await db.query('SELECT * FROM categories ORDER BY name')
+    const categories = result.rows
     
-    const { data, error } = await supabase
-      .from('categories')
-      .select('*')
-      .order('name')
-    
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
-    }
-    
-    const categories = data || []
-    
-    // Build hierarchical tree structure
-    const rootCategories = categories.filter(c => !c.parent_id)
-    
-    const tree = rootCategories.map(cat => ({
-      ...cat,
-      children: categories
-        .filter(c => c.parent_id === cat.id)
-        .map(child => ({ ...child, children: [] }))
-    }))
+    const tree = categories
+      .filter(c => !c.parent_id)
+      .map(cat => ({
+        ...cat,
+        children: categories.filter(c => c.parent_id === cat.id).map(child => ({ ...child, children: [] }))
+      }))
     
     return NextResponse.json({ categories: tree })
   } catch (error) {
@@ -35,44 +22,27 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createSupabaseServerClient()
-    
     const body = await request.json()
-    const { name, slug, description, parent_id } = body
+    const { name, slug, description, parent_id, tenant_slug } = body
     
-    // Get tenant
-    const cookies = await supabase.auth.getSession()
-    const tenantSlug = cookies.data.session?.user?.email?.split('@')[1] || 'demo'
+    const tenantSlug = tenant_slug || 'demo'
+    const tenantResult = await db.query('SELECT id FROM tenants WHERE slug = $1', [tenantSlug])
     
-    const { data: tenant } = await supabase
-      .from('tenants')
-      .select('id')
-      .eq('slug', tenantSlug)
-      .single()
-    
-    if (!tenant) {
+    if (tenantResult.rows.length === 0) {
       return NextResponse.json({ error: 'Tenant not found' }, { status: 400 })
     }
     
-    const { data: category, error } = await supabase
-      .from('categories')
-      .insert({
-        tenant_id: tenant.id,
-        name,
-        slug,
-        description,
-        parent_id
-      })
-      .select()
-      .single()
+    const tenantId = tenantResult.rows[0].id
     
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 })
-    }
+    const result = await db.query(
+      `INSERT INTO categories (tenant_id, name, slug, description, parent_id)
+       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [tenantId, name, slug, description, parent_id]
+    )
     
-    return NextResponse.json({ category }, { status: 201 })
-  } catch (error) {
+    return NextResponse.json({ category: result.rows[0] }, { status: 201 })
+  } catch (error: any) {
     console.error('Create category error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json({ error: error.message }, { status: 400 })
   }
 }

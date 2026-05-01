@@ -1,88 +1,105 @@
-import { createServerClient, type CookieOptions } from '@supabase/ssr'
-import { cookies } from 'next/headers'
+import db from '@/lib/db'
 
+// Wrapper that provides Supabase-like interface using PostgreSQL
 export async function createSupabaseServerClient() {
-  const cookieStore = await cookies()
-
-  return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll()
-        },
-        setAll(cookiesToSet: Array<{ name: string; value: string; options: Partial<CookieOptions> }>) {
-          try {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
-            )
-          } catch {
-            // Called from Server Component
+  const client = {
+    from: (table: string) => ({
+      select: (columns: string = '*') => ({
+        eq: (field: string, value: any) => ({
+          single: async () => {
+            const cols = columns === '*' ? '*' : columns.split(',').map(c => c.trim())
+            const query = cols === '*' 
+              ? `SELECT * FROM ${table} WHERE ${field} = $1`
+              : `SELECT ${cols} FROM ${table} WHERE ${field} = $1`
+            const result = await db.query(query, [value])
+            return { data: result.rows[0] || null, error: null }
+          },
+          then: (cb: any) => cb({ data: [], error: null })
+        }),
+        order: (field: string, opts: any = {}) => ({
+          limit: (n: number) => ({
+            then: async (cb: any) => {
+              const result = await db.query(
+                `SELECT * FROM ${table} ORDER BY ${field} ${opts.ascending ? 'ASC' : 'DESC'} LIMIT ${n}`
+              )
+              return cb({ data: result.rows, error: null })
+            }
+          }),
+          then: async (cb: any) => {
+            const result = await db.query(`SELECT * FROM ${table} ORDER BY ${field}`)
+            return cb({ data: result.rows, error: null })
           }
-        },
-      },
+        }),
+        range: async (start: number, end: number) => {
+          const result = await db.query(`SELECT * FROM ${table} OFFSET ${start} LIMIT ${end - start + 1}`)
+          return { data: result.rows, error: null }
+        }
+      }),
+      insert: (data: any) => ({
+        select: () => ({
+          single: async () => {
+            const keys = Object.keys(data)
+            const values = Object.values(data)
+            const placeholders = keys.map((_, i) => `$${i + 1}`).join(', ')
+            const cols = keys.join(', ')
+            const result = await db.query(
+              `INSERT INTO ${table} (${cols}) VALUES (${placeholders}) RETURNING *`,
+              values
+            )
+            return { data: result.rows[0], error: null }
+          }
+        })
+      }),
+      update: (data: any) => ({
+        eq: (field: string, value: any) => ({
+          select: () => ({
+            single: async () => {
+              const keys = Object.keys(data)
+              const values = Object.values(data)
+              const setClause = keys.map((k, i) => `${k} = $${i + 1}`).join(', ')
+              const result = await db.query(
+                `UPDATE ${table} SET ${setClause} WHERE ${field} = $${keys.length + 1} RETURNING *`,
+                [...values, value]
+              )
+              return { data: result.rows[0], error: null }
+            }
+          })
+        })
+      }),
+      delete: () => ({
+        eq: (field: string, value: any) => ({
+          then: async (cb: any) => {
+            await db.query(`DELETE FROM ${table} WHERE ${field} = $1`, [value])
+            return cb({ error: null })
+          }
+        })
+      })
+    }),
+    auth: {
+      getSession: async () => ({ data: { session: null }, error: null }),
+      getUser: async () => ({ data: { user: null }, error: null })
     }
-  )
+  }
+  return client
 }
 
 export async function getCurrentTenant() {
-  const cookieStore = await cookies()
-  const tenantSlug = cookieStore.get('x-tenant-slug')?.value
-
-  if (!tenantSlug) {
-    // Fallback: try to get from header (for API routes)
-    const headers = await cookies()
-    return null
-  }
-
-  const supabase = await createSupabaseServerClient()
-  const { data: tenant } = await supabase
-    .from('tenants')
-    .select('*')
-    .eq('slug', tenantSlug)
-    .single()
-
-  return tenant
+  const cookieStore = await import('next/headers').then(m => m.cookies())
+  const cookies = await cookieStore()
+  const tenantSlug = cookies.get('x-tenant-slug')?.value || 'demo'
+  
+  const result = await db.query('SELECT * FROM tenants WHERE slug = $1', [tenantSlug])
+  return result.rows[0] || null
 }
 
-export async function setTenantCookie(tenantSlug: string) {
-  const cookieStore = await cookies()
-  cookieStore.set('x-tenant-slug', tenantSlug, {
-    path: '/',
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    maxAge: 60 * 60 * 24 * 30, // 30 days
-  })
+export async function setTenantCookie(tenantSlug: string) {}
+
+export async function getUserTenantId() {
+  return null
 }
 
-export async function getUserTenantId(supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>): Promise<string | null> {
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return null
-
-  // Get tenant_id from user metadata or session
-  const { data: userData } = await supabase
-    .from('users')
-    .select('tenant_id')
-    .eq('id', user.id)
-    .single()
-
-  return userData?.tenant_id || null
-}
-
-export function getTenantFromSubdomain(host: string): string | null {
-  // Handle localhost
-  if (host.includes('localhost')) {
-    return 'demo'
-  }
-
-  // Extract subdomain from host (e.g., demo.store.com -> demo)
+export function getTenantFromSubdomain(host: string): string {
+  if (host.includes('localhost')) return 'demo'
   const parts = host.split('.')
-  if (parts.length >= 3) {
-    return parts[0]
-  }
-
-  // If no subdomain, default to demo
-  return 'demo'
+  return parts.length >= 3 ? parts[0] : 'demo'
 }

@@ -1,4 +1,4 @@
-import { createSupabaseServerClient } from '@/lib/supabase/server'
+import db from '@/lib/db'
 import { cookies } from 'next/headers'
 import Link from 'next/link'
 import { CookieConsent } from '@/components/ui/CookieConsent'
@@ -10,21 +10,21 @@ export default async function TenantLayout({
   children: React.ReactNode
   params: { tenantSlug: string }
 }) {
-  const supabase = await createSupabaseServerClient()
   const cookieStore = await cookies()
   
   // Set tenant in context for database queries
   cookieStore.set('x-tenant-slug', params.tenantSlug, { path: '/' })
   
   // Fetch tenant configuration
-  const { data: tenant } = await supabase
-    .from('tenants')
-    .select('name, logo_url, brand_color')
-    .eq('slug', params.tenantSlug)
-    .single()
+  const result = await db.query(
+    'SELECT name, logo_url, brand_color FROM tenants WHERE slug = $1',
+    [params.tenantSlug]
+  )
   
+  const tenant = result.rows[0]
   const brandColor = tenant?.brand_color || '#2563eb'
   const tenantName = tenant?.name || 'Loja'
+  const tenantLogo = tenant?.logo_url || null
   
   return (
     <html lang="pt-BR">

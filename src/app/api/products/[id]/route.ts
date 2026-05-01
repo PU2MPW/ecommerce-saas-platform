@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createSupabaseServerClient } from '@/lib/supabase/server'
+import db from '@/lib/db'
 
 export async function GET(
   request: NextRequest,
@@ -7,42 +7,23 @@ export async function GET(
 ) {
   try {
     const { id } = await params
-    const supabase = await createSupabaseServerClient()
     
-    // Try to fetch by slug first, then by id
-    let query = supabase
-      .from('products')
-      .select('*, category:categories(*), images:product_images(*), variants:product_variants(*), reviews:reviews(*)')
-      .eq('is_active', true)
-    
-    // Check if it's a UUID or a slug
     const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
     
+    let query = 'SELECT * FROM products WHERE is_active = true AND '
     if (isUUID) {
-      query = query.eq('id', id)
+      query += 'id = $1'
     } else {
-      query = query.eq('slug', id)
+      query += 'slug = $1'
     }
     
-    const { data: product, error } = await query.single()
+    const result = await db.query(query, [id])
     
-    if (error || !product) {
+    if (result.rows.length === 0) {
       return NextResponse.json({ error: 'Product not found' }, { status: 404 })
     }
     
-    // Calculate average rating
-    const reviews = product.reviews || []
-    const avgRating = reviews.length > 0
-      ? reviews.reduce((acc: number, r: { rating: number }) => acc + r.rating, 0) / reviews.length
-      : 0
-    
-    const response = {
-      ...product,
-      avg_rating: Math.round(avgRating * 10) / 10,
-      review_count: reviews.length
-    }
-    
-    return NextResponse.json({ product: response })
+    return NextResponse.json({ product: result.rows[0] })
   } catch (error) {
     console.error('Get product error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
@@ -55,40 +36,23 @@ export async function PUT(
 ) {
   try {
     const { id } = await params
-    const supabase = await createSupabaseServerClient()
-    
     const body = await request.json()
-    const { 
-      name, slug, description, price, compare_at_price, sku, 
-      category_id, is_active, is_featured 
-    } = body
+    const { name, slug, description, price, compare_at_price, sku, category_id, is_active, is_featured } = body
     
-    const { data: product, error } = await supabase
-      .from('products')
-      .update({
-        name,
-        slug,
-        description,
-        price,
-        compare_at_price,
-        sku,
-        category_id,
-        is_active,
-        is_featured,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', id)
-      .select()
-      .single()
+    const result = await db.query(
+      `UPDATE products SET name=$1, slug=$2, description=$3, price=$4, compare_at_price=$5, sku=$6, category_id=$7, is_active=$8, is_featured=$9, updated_at=NOW()
+       WHERE id=$10 RETURNING *`,
+      [name, slug, description, price, compare_at_price, sku, category_id, is_active, is_featured, id]
+    )
     
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 })
+    if (result.rows.length === 0) {
+      return NextResponse.json({ error: 'Product not found' }, { status: 404 })
     }
     
-    return NextResponse.json({ product })
-  } catch (error) {
+    return NextResponse.json({ product: result.rows[0] })
+  } catch (error: any) {
     console.error('Update product error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json({ error: error.message }, { status: 400 })
   }
 }
 
@@ -98,20 +62,12 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params
-    const supabase = await createSupabaseServerClient()
     
-    const { error } = await supabase
-      .from('products')
-      .delete()
-      .eq('id', id)
-    
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 })
-    }
+    await db.query('DELETE FROM products WHERE id = $1', [id])
     
     return NextResponse.json({ success: true })
-  } catch (error) {
+  } catch (error: any) {
     console.error('Delete product error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json({ error: error.message }, { status: 400 })
   }
 }
