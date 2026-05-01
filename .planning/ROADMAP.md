@@ -49,6 +49,13 @@
 
 **Requirements:** CATG-01, CATG-02, CATG-03, CATG-04, CATG-05, CATG-06, CATG-07, CART-01, CART-02, CART-03, CART-04
 
+**Plans:** 3 plans
+
+**Plan list:**
+- [ ] 02-01-PLAN.md — Database schema + Product API
+- [ ] 02-02-PLAN.md — Product Catalog UI
+- [ ] 02-03-PLAN.md — Shopping Cart
+
 **Success Criteria:**
 1. Lista de produtos carrega do banco com paginação
 2. Busca por nome funciona corretamente

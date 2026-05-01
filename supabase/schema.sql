@@ -263,5 +263,154 @@ VALUES ('demo', 'Loja Demo', 'admin@demo.com', '#2563eb')
 ON CONFLICT (slug) DO NOTHING;
 
 -- ============================================
+-- CATEGORIES TABLE
+-- ============================================
+CREATE TABLE categories (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  slug TEXT NOT NULL,
+  description TEXT,
+  parent_id UUID REFERENCES categories(id),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(tenant_id, slug)
+);
+
+CREATE INDEX idx_categories_tenant ON categories(tenant_id);
+
+-- ============================================
+-- PRODUCTS TABLE
+-- ============================================
+CREATE TABLE products (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
+  category_id UUID REFERENCES categories(id),
+  name TEXT NOT NULL,
+  slug TEXT NOT NULL,
+  description TEXT,
+  price DECIMAL(10,2) NOT NULL,
+  compare_at_price DECIMAL(10,2),
+  sku TEXT,
+  is_active BOOLEAN DEFAULT true,
+  is_featured BOOLEAN DEFAULT false,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(tenant_id, slug)
+);
+
+CREATE INDEX idx_products_tenant ON products(tenant_id);
+CREATE INDEX idx_products_category ON products(category_id);
+CREATE INDEX idx_products_slug ON products(slug);
+CREATE INDEX idx_products_name_search ON products USING gin(to_tsvector('portuguese', name));
+
+-- ============================================
+-- PRODUCT IMAGES TABLE
+-- ============================================
+CREATE TABLE product_images (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  product_id UUID REFERENCES products(id) ON DELETE CASCADE,
+  url TEXT NOT NULL,
+  alt_text TEXT,
+  position INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_product_images_product ON product_images(product_id);
+
+-- ============================================
+-- PRODUCT VARIANTS TABLE
+-- ============================================
+CREATE TABLE product_variants (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  product_id UUID REFERENCES products(id) ON DELETE CASCADE,
+  sku TEXT,
+  size TEXT,
+  color TEXT,
+  price DECIMAL(10,2),
+  inventory INTEGER DEFAULT 0,
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_product_variants_product ON product_variants(product_id);
+CREATE INDEX idx_product_variants_sku ON product_variants(sku);
+
+-- ============================================
+-- REVIEWS TABLE
+-- ============================================
+CREATE TABLE reviews (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  product_id UUID REFERENCES products(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES users(id),
+  rating INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 5),
+  title TEXT,
+  comment TEXT,
+  is_verified_purchase BOOLEAN DEFAULT false,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_reviews_product ON reviews(product_id);
+CREATE INDEX idx_reviews_user ON reviews(user_id);
+
+-- ============================================
+-- RLS POLICIES FOR PRODUCT TABLES
+-- ============================================
+
+-- Enable RLS
+ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
+ALTER TABLE products ENABLE ROW LEVEL SECURITY;
+ALTER TABLE product_images ENABLE ROW LEVEL SECURITY;
+ALTER TABLE product_variants ENABLE ROW LEVEL SECURITY;
+ALTER TABLE reviews ENABLE ROW LEVEL SECURITY;
+
+-- CATEGORIES: tenant isolation
+CREATE POLICY "Categories tenant isolation" ON categories
+  FOR ALL USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
+
+-- PRODUCTS: tenant isolation
+CREATE POLICY "Products tenant isolation" ON products
+  FOR ALL USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
+
+-- Allow public read of active products (storefront)
+CREATE POLICY "Public read active products" ON products
+  FOR SELECT USING (is_active = true);
+
+-- PRODUCT_IMAGES: tenant isolation via product
+CREATE POLICY "Product images tenant isolation" ON product_images
+  FOR ALL USING (product_id IN (
+    SELECT id FROM products WHERE tenant_id = current_setting('app.current_tenant_id', true)::uuid
+  ));
+
+-- PRODUCT_VARIANTS: tenant isolation via product
+CREATE POLICY "Product variants tenant isolation" ON product_variants
+  FOR ALL USING (product_id IN (
+    SELECT id FROM products WHERE tenant_id = current_setting('app.current_tenant_id', true)::uuid
+  ));
+
+-- REVIEWS: tenant isolation + public read
+CREATE POLICY "Reviews tenant isolation" ON reviews
+  FOR ALL USING (product_id IN (
+    SELECT id FROM products WHERE tenant_id = current_setting('app.current_tenant_id', true)::uuid
+  ));
+
+-- ============================================
+-- SEED DATA: Create demo categories and products
+-- ============================================
+INSERT INTO categories (tenant_id, name, slug, description)
+SELECT id, 'Roupas', 'roupas', 'Roupas em geral' FROM tenants WHERE slug = 'demo'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO categories (tenant_id, name, slug, description)
+SELECT id, 'Eletrônicos', 'eletronicos', 'Aparelhos eletrônicos' FROM tenants WHERE slug = 'demo'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO categories (tenant_id, name, slug, description)
+SELECT id, 'Acessórios', 'acessorios', 'Acessórios diversos' FROM tenants WHERE slug = 'demo'
+ON CONFLICT DO NOTHING;
+
+-- ============================================
 -- END OF SCHEMA
 -- ============================================
