@@ -1,6 +1,7 @@
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 import { cookies } from 'next/headers'
 import Link from 'next/link'
+import { CookieConsent } from '@/components/ui/CookieConsent'
 
 export default async function TenantLayout({
   children,
@@ -92,6 +93,9 @@ export default async function TenantLayout({
         <main className="flex-1">
           {children}
         </main>
+        
+        {/* Cookie Consent */}
+        <CookieConsent />
         
         {/* Footer */}
         <footer className="bg-white border-t mt-auto">
